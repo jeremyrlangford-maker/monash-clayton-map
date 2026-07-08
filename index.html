@@ -33,6 +33,9 @@
     font-size: 20px;
   }
   #locateBtn.active { background: #2a7de1; }
+  #measureBtn { right: 14px; top: 262px; font-size: 20px; }
+  #measureBtn.active { background: #e2483d; }
+
   #status {
     position: absolute; left: 14px; top: 14px;
     background: rgba(20,20,20,0.85); color: #eee;
@@ -78,6 +81,7 @@
   .resultItem:active, .resultItem:hover { background: rgba(255,255,255,0.1); }
   .resultItem .rno { color: #7fc4ff; font-weight: 600; margin-right: 6px; }
   .resultItem .raddr { color: #999; font-size: 11px; display: block; margin-top: 2px; }
+  .resultItem .rnoloc { color: #ffb347; font-size: 10px; display: block; margin-top: 2px; }
 
   #toast {
     position: absolute; left: 14px; bottom: 14px; right: 68px;
@@ -88,6 +92,23 @@
   }
   #toast.show { display: block; }
   #toast .warn { color: #ffb347; }
+
+  #measurePanel {
+    position: absolute; left: 14px; right: 68px; bottom: 14px;
+    background: rgba(20,20,20,0.92); color: #eee;
+    padding: 12px 14px; border-radius: 10px;
+    font-size: 12px; line-height: 1.6;
+    display: none;
+  }
+  #measurePanel.show { display: block; }
+  #measurePanel .mpTitle { font-size: 13px; font-weight: 600; color: #fff; margin-bottom: 4px; }
+  #measurePanel .mpDist { font-size: 18px; font-weight: 700; color: #ffd166; margin: 4px 0; }
+  #measurePanel .mpRow { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+  #measurePanel button {
+    background: rgba(255,255,255,0.12); color: #fff; border: 1px solid rgba(255,255,255,0.25);
+    border-radius: 8px; padding: 7px 12px; font-size: 12px; cursor: pointer;
+  }
+  #measurePanel button:active { background: rgba(255,255,255,0.25); }
 </style>
 </head>
 <body>
@@ -100,11 +121,23 @@
 </div>
 
 <div id="toast"></div>
-<div id="debugReadout" style="display:none;position:absolute;left:14px;bottom:14px;right:68px;background:rgba(20,20,20,0.85);color:#7fc4ff;padding:8px 12px;border-radius:10px;font-size:11px;line-height:1.5;font-family:monospace;"></div>
+<div id="debugReadout" style="display:none;position:absolute;left:14px;bottom:100px;right:68px;background:rgba(20,20,20,0.85);color:#7fc4ff;padding:8px 12px;border-radius:10px;font-size:11px;line-height:1.5;font-family:monospace;"></div>
+
+<div id="measurePanel">
+  <div class="mpTitle">Measure distance</div>
+  <div id="mpStatus">Tap two points on the map, or search and pick a building.</div>
+  <div id="mpDist" class="mpDist" style="display:none;"></div>
+  <div class="mpRow">
+    <button id="mpUseLoc">Use my location</button>
+    <button id="mpClear">Clear points</button>
+    <button id="mpClose">Done</button>
+  </div>
+</div>
 
 <div class="btn" id="zoomIn">+</div>
 <div class="btn" id="zoomOut">&minus;</div>
 <div class="btn" id="locateBtn">&#9737;</div>
+<div class="btn" id="measureBtn">&#128207;</div>
 
 <script>
 // ---- Embedded campus map image (georeferenced to the PDF's 4 marked GPS points) ----
@@ -116,7 +149,7 @@ const IMG_H = 1755;
 // and matched to on-map label positions (pixel coords in the image above).
 // 19 of 112 buildings had no matching label found on the map body itself
 // (mostly the off-site Business Park addresses) and are left out of search.
-const BUILDINGS = [{"address":"14 Alliance Lane","no":"72","name":"Engineering 72, Alexander Stewart Theatre","px":500.5,"py":786.7},{"address":"15 Alliance Lane","no":"59","name":"Australian Pulp and Paper","px":551.1,"py":765.8},{"address":"16 Alliance Lane","no":"35","name":"Engineering 35","px":578.6,"py":808.0},{"address":"17 Alliance Lane","no":"37","name":"Engineering 37","px":634.1,"py":718.8},{"address":"18 Alliance Lane","no":"36","name":"Engineering 36","px":689.8,"py":796.7},{"address":"20 Alliance Lane","no":"36A","name":"Engineering 36A","px":724.3,"py":829.8},{"address":"21 Alliance Lane","no":"70","name":"Monash University Accident Research Centre","px":758.0,"py":740.2},{"address":"22 Alliance Lane","no":"69","name":"Engineering 69","px":761.3,"py":783.8},{"address":"7 Ancora Imparo Way","no":"93","name":"Biomedical Learning & Teaching Building","px":286.3,"py":1304.0},{"address":"9 Ancora Imparo Way","no":"13E","name":"Medicine E","px":null,"py":null},{"address":"10 Ancora Imparo Way","no":"58","name":"Yarrawonga","px":345.8,"py":1412.5},{"address":"12 Ancora Imparo Way","no":"54","name":"Japanese Study Centre","px":393.6,"py":1392.0},{"address":"14 Ancora Imparo Way","no":"65","name":"Monash House","px":431.6,"py":1457.3},{"address":"15 Ancora Imparo Way","no":"12","name":"Law & Theatres L1-L5","px":547.3,"py":1306.5},{"address":"19 Ancora Imparo Way","no":"92","name":"Learning and Teaching Building","px":631.6,"py":1421.0},{"address":"20 Ancora Imparo Way","no":"91","name":"S2 Underground Carpark","px":752.8,"py":1503.3},{"address":"29 Ancora Imparo Way","no":"6","name":"Education","px":816.6,"py":1428.8},{"address":"52 Ancora Imparo Way","no":"49","name":"South-Eastern Flats","px":1421.1,"py":1504.3},{"address":"60 Beddoe Ave","no":"160","name":"Monash-Oakleigh Legal","px":null,"py":null},{"address":"62 Beddoe Ave","no":"162","name":"Monash Children's Centre Co-op","px":null,"py":null},{"address":"680 Blackburn Rd","no":"201","name":"MU Business Park","px":null,"py":null},{"address":"700 Blackburn Rd","no":"203","name":"MU Business Park","px":1606.1,"py":386.3},{"address":"710 Blackburn Rd","no":"202","name":"MU Business Park","px":1666.1,"py":486.3},{"address":"738 Blackburn Rd","no":"205","name":"MU Business Park - eSolutions","px":1640.1,"py":648.5},{"address":"762 Blackburn Rd","no":"220","name":"Monash Biomedical Imaging","px":1645.8,"py":1078.8},{"address":"10 Chancellors Walk","no":"13C","name":"Medicine C & Theatres M2-M3","px":null,"py":null},{"address":"11 Chancellors Walk","no":"16","name":"Biochemistry Laboratories","px":412.8,"py":1148.8},{"address":"20 Chancellors Walk","no":"11","name":"Menzies & Theatres H1-H10","px":621.8,"py":1248.3},{"address":"21 Chancellors Walk","no":"10","name":"Campus Centre","px":639.1,"py":1131.3},{"address":"27 Chancellors Walk","no":"3A","name":"Chancellery building A","px":null,"py":null},{"address":"10 College Walk","no":"27","name":"Physics","px":366.8,"py":936.0},{"address":"13 College Walk","no":"30","name":"Hargrave-Andrew Library","px":484.6,"py":855.3},{"address":"17 College Walk","no":"31","name":"Engineering 31","px":587.3,"py":886.8},{"address":"19 College Walk","no":"33","name":"Engineering 33","px":614.8,"py":852.8},{"address":"21 College Walk","no":"32","name":"Engineering Lecture Theatres E1-E6","px":659.8,"py":849.5},{"address":"23 College Walk","no":"60","name":"Engineering 60","px":722.8,"py":879.3},{"address":"38 College Walk","no":"87","name":"Turner Hall","px":1129.1,"py":827.5},{"address":"42 College Walk","no":"85B","name":"Briggs Hall","px":1292.3,"py":855.3},{"address":"44 College Walk","no":"85A","name":"Jackomos Hall","px":1324.8,"py":773.7},{"address":"50 College Walk","no":"42C","name":"JMR Education Centre","px":1316.6,"py":555.3},{"address":"52 College Walk","no":"42","name":"JMR Environmental Labs","px":1358.8,"py":579.0},{"address":"54 College Walk","no":"42A","name":"Plant Science Complex","px":1468.8,"py":580.3},{"address":"56 College Way","no":"48","name":"Deakin Hall","px":1459.5,"py":475.2},{"address":"58 College Way","no":"47","name":"MRS admin & amenities","px":1472.3,"py":399.0},{"address":"60 College Way","no":"46","name":"Howitt Hall","px":null,"py":null},{"address":"61 College Way","no":"44","name":"Roberts Hall","px":1281.6,"py":368.5},{"address":"62 College Way","no":"45","name":"Farrer Hall","px":1365.1,"py":353.3},{"address":"63 College Way","no":"43","name":"Richardson Hall","px":1195.3,"py":344.5},{"address":"25 Exhibition Walk","no":"63","name":"Faculty of Information Technology","px":720.8,"py":960.3},{"address":"32 Exhibition Walk","no":"50","name":"Monash University Club","px":810.3,"py":1061.0},{"address":"34 Exhibition Walk","no":"3C","name":"Chancellery building C","px":852.8,"py":1101.0},{"address":"36 Exhibition Walk","no":"3B","name":"Chancellery building B","px":null,"py":null},{"address":"38 Exhibition Walk","no":"9","name":"Religious Centre","px":782.6,"py":1115.8},{"address":"40 Exhibition Walk","no":"4","name":"Sir Louis Matheson Library","px":805.3,"py":1263.0},{"address":"44 Exhibition Walk","no":"67","name":"Information Services","px":803.8,"py":1335.8},{"address":"46 Exhibition Walk","no":"8","name":"Rotunda R1-R7","px":null,"py":null},{"address":"48 Exhibition Walk","no":"7","name":"Alexander Theatre","px":725.1,"py":1400.5},{"address":"56 Howleys Rd","no":"83","name":"Monash Community Family Co-op (MCFCO)","px":1087.6,"py":117.3},{"address":"2 Innovation Walk","no":"80","name":"Multi-level Carpark - North one","px":null,"py":null},{"address":"7 Innovation Walk","no":"79P","name":"Science Portables","px":193.6,"py":781.2},{"address":"10 Innovation Walk","no":"81","name":"Monash Centre Electron Microscopy","px":277.8,"py":870.8},{"address":"12 Innovation Walk","no":"53","name":"Microbiology & Biological Sciences","px":284.3,"py":968.0},{"address":"15 Innovation Walk","no":"75","name":"STRIP1 - Monash Biotechnology","px":192.8,"py":981.8},{"address":"18 Innovation Walk","no":"17","name":"Biology","px":293.3,"py":1089.2},{"address":"19 Innovation Walk","no":"76","name":"STRIP2 - Biomedical Sciences","px":202.6,"py":1121.3},{"address":"23 Innovation Walk","no":"77","name":"STRIP3 - Biomedical Sciences","px":213.6,"py":1183.8},{"address":"26 Innovation Walk","no":"13F","name":"Medicine F","px":null,"py":null},{"address":"33 Innovation Walk","no":"73P","name":"MC Learning Village","px":258.3,"py":1411.8},{"address":"39 Innovation Walk","no":"84","name":"John Monash Science School","px":249.1,"py":1506.3},{"address":"101 Normanby Rd","no":"52","name":"Normanby House","px":1193.8,"py":153.5},{"address":"5 Rainforest Walk","no":"80A","name":"Bicycle Arrival Station - James Gormley","px":null,"py":null},{"address":"9 Rainforest Walk","no":"28","name":"Mathematics & EAE","px":343.3,"py":784.5},{"address":"11 Rainforest Walk","no":"29","name":"Science Theatres (North) S13-S15","px":398.3,"py":827.8},{"address":"13 Rainforest Walk","no":"86","name":"Green Chemical Futures","px":380.8,"py":880.8},{"address":"14 Rainforest Walk","no":"26","name":"Information Technology & Faculty of Science","px":524.6,"py":937.8},{"address":"15 Rainforest Walk","no":"24","name":"Science Theatres (West) S5-S6","px":367.6,"py":968.0},{"address":"16 Rainforest Walk","no":"25","name":"Science Theatres (East) S1-S4, S9-S12","px":539.6,"py":972.5},{"address":"17 Rainforest Walk","no":"23","name":"Chemistry","px":352.6,"py":1006.8},{"address":"19 Rainforest Walk","no":"19","name":"Central Science Block","px":429.8,"py":1025.5},{"address":"21 Rainforest Walk","no":"21","name":"Biological Sciences theatres S7-S8","px":389.1,"py":1072.3},{"address":"22 Rainforest Walk","no":"20","name":"Chemistry","px":223.0,"py":1455.9},{"address":"23 Rainforest Walk","no":"22","name":"First Year Biology","px":340.3,"py":1071.5},{"address":"25 Rainforest Walk","no":"18","name":"Biological Sciences","px":369.3,"py":1102.5},{"address":"27 Rainforest Walk","no":"15","name":"Medical Teaching - MBBS","px":455.3,"py":1148.8},{"address":"35 Rainforest Walk","no":"13D","name":"Medicine D","px":null,"py":null},{"address":"37 Rainforest Walk","no":"13A","name":"Medicine A & Theatre M1","px":null,"py":null},{"address":"39 Rainforest Walk","no":"13B","name":"Medicine B","px":438.3,"py":1269.4},{"address":"43 Rainforest Walk","no":"64","name":"Faculty of Medicine Offices","px":453.1,"py":1322.8},{"address":"49 Rainforest Walk","no":"73","name":"Monash College","px":395.6,"py":1556.5},{"address":"20 Research Way","no":"82","name":"New Horizons","px":518.3,"py":611.5},{"address":"22 Research Way","no":"38","name":"Boiler House","px":576.3,"py":643.4},{"address":"22 Research Way","no":"82A","name":"New Horizons - Co-Gen","px":null,"py":null},{"address":"26 Research Way","no":"40","name":"Facilities & Services, Science Instrumentation","px":667.1,"py":608.5},{"address":"30 Research Way","no":"56","name":"Facilities & Services, Transport & Mail","px":774.6,"py":597.8},{"address":"8 Scenic Blvd","no":"74","name":"Monash Sustainability Institute","px":1085.6,"py":401.0},{"address":"10 Scenic Blvd","no":"74P","name":"74P Portable","px":null,"py":null},{"address":"13 Scenic Blvd","no":"41","name":"Buildings 41A - 41G","px":866.3,"py":583.3},{"address":"36 Scenic Blvd","no":"1B","name":"Doug Ellis swimming pool","px":1092.3,"py":1032.0},{"address":"42 Scenic Blvd","no":"1","name":"Monash Sport","px":1070.3,"py":1204.5},{"address":"49 Scenic Blvd","no":"2","name":"Robert Blackwood Hall","px":916.1,"py":1224.3},{"address":"55 Scenic Blvd","no":"68","name":"Performing Arts","px":880.1,"py":1343.3},{"address":"57 Scenic Blvd","no":"5","name":"Krongold Centre","px":848.8,"py":1375.8},{"address":"59 Scenic Blvd","no":"61","name":"Security & Traffic","px":898.6,"py":1406.8},{"address":"60 Scenic Blvd","no":"71","name":"Multi-level Carpark - SE4","px":1181.6,"py":1454.3},{"address":"21 Sports Walk","no":"89","name":"Campbell Hall","px":789.3,"py":999.9},{"address":"24 Sports Walk","no":"3E","name":"Chancellery building E","px":887.6,"py":1054.3},{"address":"26 Sports Walk","no":"3D","name":"Chancellery building D","px":858.8,"py":1072.8},{"address":"27 Sports Walk","no":"88","name":"Holman Hall","px":949.3,"py":990.4},{"address":"28 Sports Walk","no":"90","name":"Logan Hall","px":968.6,"py":1065.0},{"address":"151 Wellington Rd","no":"222","name":"Melbourne Centre for Nanofabrication","px":null,"py":null},{"address":"211 Wellington Rd","no":"226","name":"Staff Development","px":null,"py":null},{"address":"321 Ferntree Gully Rd","no":"227","name":"Executive Accomodation University","px":null,"py":null}];
+const BUILDINGS = [{"address":"14 Alliance Lane","no":"72","name":"Engineering 72, Alexander Stewart Theatre","px":500.5,"py":786.7},{"address":"15 Alliance Lane","no":"59","name":"Australian Pulp and Paper","px":551.1,"py":765.8},{"address":"16 Alliance Lane","no":"35","name":"Engineering 35","px":578.6,"py":808.0},{"address":"17 Alliance Lane","no":"37","name":"Engineering 37","px":634.1,"py":718.8},{"address":"18 Alliance Lane","no":"36","name":"Engineering 36","px":689.8,"py":796.7},{"address":"20 Alliance Lane","no":"36A","name":"Engineering 36A","px":724.3,"py":829.8},{"address":"21 Alliance Lane","no":"70","name":"Monash University Accident Research Centre","px":758.0,"py":740.2},{"address":"22 Alliance Lane","no":"69","name":"Engineering 69","px":761.3,"py":783.8},{"address":"7 Ancora Imparo Way","no":"93","name":"Biomedical Learning & Teaching Building","px":286.3,"py":1304.0},{"address":"9 Ancora Imparo Way","no":"13E","name":"Medicine E","px":365,"py":1295},{"address":"10 Ancora Imparo Way","no":"58","name":"Yarrawonga","px":345.8,"py":1412.5},{"address":"12 Ancora Imparo Way","no":"54","name":"Japanese Study Centre","px":393.6,"py":1392.0},{"address":"14 Ancora Imparo Way","no":"65","name":"Monash House","px":431.6,"py":1457.3},{"address":"15 Ancora Imparo Way","no":"12","name":"Law & Theatres L1-L5","px":547.3,"py":1306.5},{"address":"19 Ancora Imparo Way","no":"92","name":"Learning and Teaching Building","px":631.6,"py":1421.0},{"address":"20 Ancora Imparo Way","no":"91","name":"S2 Underground Carpark","px":752.8,"py":1503.3},{"address":"29 Ancora Imparo Way","no":"6","name":"Education","px":816.6,"py":1428.8},{"address":"52 Ancora Imparo Way","no":"49","name":"South-Eastern Flats","px":1421.1,"py":1504.3},{"address":"60 Beddoe Ave","no":"160","name":"Monash-Oakleigh Legal","px":null,"py":null},{"address":"62 Beddoe Ave","no":"162","name":"Monash Children's Centre Co-op","px":null,"py":null},{"address":"680 Blackburn Rd","no":"201","name":"MU Business Park","px":null,"py":null},{"address":"700 Blackburn Rd","no":"203","name":"MU Business Park","px":1606.1,"py":386.3},{"address":"710 Blackburn Rd","no":"202","name":"MU Business Park","px":1666.1,"py":486.3},{"address":"738 Blackburn Rd","no":"205","name":"MU Business Park - eSolutions","px":1640.1,"py":648.5},{"address":"762 Blackburn Rd","no":"220","name":"Monash Biomedical Imaging","px":1645.8,"py":1078.8},{"address":"10 Chancellors Walk","no":"13C","name":"Medicine C & Theatres M2-M3","px":372,"py":1200},{"address":"11 Chancellors Walk","no":"16","name":"Biochemistry Laboratories","px":412.8,"py":1148.8},{"address":"20 Chancellors Walk","no":"11","name":"Menzies & Theatres H1-H10","px":621.8,"py":1248.3},{"address":"21 Chancellors Walk","no":"10","name":"Campus Centre","px":639.1,"py":1131.3},{"address":"27 Chancellors Walk","no":"3A","name":"Chancellery building A","px":null,"py":null},{"address":"10 College Walk","no":"27","name":"Physics","px":366.8,"py":936.0},{"address":"13 College Walk","no":"30","name":"Hargrave-Andrew Library","px":484.6,"py":855.3},{"address":"17 College Walk","no":"31","name":"Engineering 31","px":587.3,"py":886.8},{"address":"19 College Walk","no":"33","name":"Engineering 33","px":614.8,"py":852.8},{"address":"21 College Walk","no":"32","name":"Engineering Lecture Theatres E1-E6","px":659.8,"py":849.5},{"address":"23 College Walk","no":"60","name":"Engineering 60","px":722.8,"py":879.3},{"address":"38 College Walk","no":"87","name":"Turner Hall","px":1129.1,"py":827.5},{"address":"42 College Walk","no":"85B","name":"Briggs Hall","px":1292.3,"py":855.3},{"address":"44 College Walk","no":"85A","name":"Jackomos Hall","px":1324.8,"py":773.7},{"address":"50 College Walk","no":"42C","name":"JMR Education Centre","px":1316.6,"py":555.3},{"address":"52 College Walk","no":"42","name":"JMR Environmental Labs","px":1358.8,"py":579.0},{"address":"54 College Walk","no":"42A","name":"Plant Science Complex","px":1468.8,"py":580.3},{"address":"56 College Way","no":"48","name":"Deakin Hall","px":1459.5,"py":475.2},{"address":"58 College Way","no":"47","name":"MRS admin & amenities","px":1472.3,"py":399.0},{"address":"60 College Way","no":"46","name":"Howitt Hall","px":null,"py":null},{"address":"61 College Way","no":"44","name":"Roberts Hall","px":1281.6,"py":368.5},{"address":"62 College Way","no":"45","name":"Farrer Hall","px":1365.1,"py":353.3},{"address":"63 College Way","no":"43","name":"Richardson Hall","px":1195.3,"py":344.5},{"address":"25 Exhibition Walk","no":"63","name":"Faculty of Information Technology","px":720.8,"py":960.3},{"address":"32 Exhibition Walk","no":"50","name":"Monash University Club","px":810.3,"py":1061.0},{"address":"34 Exhibition Walk","no":"3C","name":"Chancellery building C","px":852.8,"py":1101.0},{"address":"36 Exhibition Walk","no":"3B","name":"Chancellery building B","px":null,"py":null},{"address":"38 Exhibition Walk","no":"9","name":"Religious Centre","px":782.6,"py":1115.8},{"address":"40 Exhibition Walk","no":"4","name":"Sir Louis Matheson Library","px":805.3,"py":1263.0},{"address":"44 Exhibition Walk","no":"67","name":"Information Services","px":803.8,"py":1335.8},{"address":"46 Exhibition Walk","no":"8","name":"Rotunda R1-R7","px":null,"py":null},{"address":"48 Exhibition Walk","no":"7","name":"Alexander Theatre","px":725.1,"py":1400.5},{"address":"56 Howleys Rd","no":"83","name":"Monash Community Family Co-op (MCFCO)","px":1087.6,"py":117.3},{"address":"2 Innovation Walk","no":"80","name":"Multi-level Carpark - North one","px":null,"py":null},{"address":"7 Innovation Walk","no":"79P","name":"Science Portables","px":193.6,"py":781.2},{"address":"10 Innovation Walk","no":"81","name":"Monash Centre Electron Microscopy","px":277.8,"py":870.8},{"address":"12 Innovation Walk","no":"53","name":"Microbiology & Biological Sciences","px":284.3,"py":968.0},{"address":"15 Innovation Walk","no":"75","name":"STRIP1 - Monash Biotechnology","px":192.8,"py":981.8},{"address":"18 Innovation Walk","no":"17","name":"Biology","px":293.3,"py":1089.2},{"address":"19 Innovation Walk","no":"76","name":"STRIP2 - Biomedical Sciences","px":202.6,"py":1121.3},{"address":"23 Innovation Walk","no":"77","name":"STRIP3 - Biomedical Sciences","px":213.6,"py":1183.8},{"address":"26 Innovation Walk","no":"13F","name":"Medicine F","px":285,"py":1252},{"address":"33 Innovation Walk","no":"73P","name":"MC Learning Village","px":258.3,"py":1411.8},{"address":"39 Innovation Walk","no":"84","name":"John Monash Science School","px":249.1,"py":1506.3},{"address":"101 Normanby Rd","no":"52","name":"Normanby House","px":1193.8,"py":153.5},{"address":"5 Rainforest Walk","no":"80A","name":"Bicycle Arrival Station - James Gormley","px":null,"py":null},{"address":"9 Rainforest Walk","no":"28","name":"Mathematics & EAE","px":343.3,"py":784.5},{"address":"11 Rainforest Walk","no":"29","name":"Science Theatres (North) S13-S15","px":398.3,"py":827.8},{"address":"13 Rainforest Walk","no":"86","name":"Green Chemical Futures","px":380.8,"py":880.8},{"address":"14 Rainforest Walk","no":"26","name":"Information Technology & Faculty of Science","px":524.6,"py":937.8},{"address":"15 Rainforest Walk","no":"24","name":"Science Theatres (West) S5-S6","px":367.6,"py":968.0},{"address":"16 Rainforest Walk","no":"25","name":"Science Theatres (East) S1-S4, S9-S12","px":539.6,"py":972.5},{"address":"17 Rainforest Walk","no":"23","name":"Chemistry","px":352.6,"py":1006.8},{"address":"19 Rainforest Walk","no":"19","name":"Central Science Block","px":429.8,"py":1025.5},{"address":"21 Rainforest Walk","no":"21","name":"Biological Sciences theatres S7-S8","px":389.1,"py":1072.3},{"address":"22 Rainforest Walk","no":"20","name":"Chemistry","px":223.0,"py":1455.9},{"address":"23 Rainforest Walk","no":"22","name":"First Year Biology","px":340.3,"py":1071.5},{"address":"25 Rainforest Walk","no":"18","name":"Biological Sciences","px":369.3,"py":1102.5},{"address":"27 Rainforest Walk","no":"15","name":"Medical Teaching - MBBS","px":455.3,"py":1148.8},{"address":"35 Rainforest Walk","no":"13D","name":"Medicine D","px":435,"py":1250},{"address":"37 Rainforest Walk","no":"13A","name":"Medicine A & Theatre M1","px":375,"py":1252},{"address":"39 Rainforest Walk","no":"13B","name":"Medicine B","px":438.3,"py":1269.4},{"address":"43 Rainforest Walk","no":"64","name":"Faculty of Medicine Offices","px":453.1,"py":1322.8},{"address":"49 Rainforest Walk","no":"73","name":"Monash College","px":395.6,"py":1556.5},{"address":"20 Research Way","no":"82","name":"New Horizons","px":518.3,"py":611.5},{"address":"22 Research Way","no":"38","name":"Boiler House","px":576.3,"py":643.4},{"address":"22 Research Way","no":"82A","name":"New Horizons - Co-Gen","px":null,"py":null},{"address":"26 Research Way","no":"40","name":"Facilities & Services, Science Instrumentation","px":667.1,"py":608.5},{"address":"30 Research Way","no":"56","name":"Facilities & Services, Transport & Mail","px":774.6,"py":597.8},{"address":"8 Scenic Blvd","no":"74","name":"Monash Sustainability Institute","px":1085.6,"py":401.0},{"address":"10 Scenic Blvd","no":"74P","name":"74P Portable","px":null,"py":null},{"address":"13 Scenic Blvd","no":"41","name":"Buildings 41A - 41G","px":866.3,"py":583.3},{"address":"36 Scenic Blvd","no":"1B","name":"Doug Ellis swimming pool","px":1092.3,"py":1032.0},{"address":"42 Scenic Blvd","no":"1","name":"Monash Sport","px":1070.3,"py":1204.5},{"address":"49 Scenic Blvd","no":"2","name":"Robert Blackwood Hall","px":916.1,"py":1224.3},{"address":"55 Scenic Blvd","no":"68","name":"Performing Arts","px":880.1,"py":1343.3},{"address":"57 Scenic Blvd","no":"5","name":"Krongold Centre","px":848.8,"py":1375.8},{"address":"59 Scenic Blvd","no":"61","name":"Security & Traffic","px":898.6,"py":1406.8},{"address":"60 Scenic Blvd","no":"71","name":"Multi-level Carpark - SE4","px":1181.6,"py":1454.3},{"address":"21 Sports Walk","no":"89","name":"Campbell Hall","px":789.3,"py":999.9},{"address":"24 Sports Walk","no":"3E","name":"Chancellery building E","px":887.6,"py":1054.3},{"address":"26 Sports Walk","no":"3D","name":"Chancellery building D","px":858.8,"py":1072.8},{"address":"27 Sports Walk","no":"88","name":"Holman Hall","px":949.3,"py":990.4},{"address":"28 Sports Walk","no":"90","name":"Logan Hall","px":968.6,"py":1065.0},{"address":"151 Wellington Rd","no":"222","name":"Melbourne Centre for Nanofabrication","px":1938.3,"py":1529.3},{"address":"211 Wellington Rd","no":"226","name":"Staff Development","px":null,"py":null},{"address":"321 Ferntree Gully Rd","no":"227","name":"Executive Accomodation University","px":null,"py":null}];
 
 // Affine transform coefficients, fitted from 4 known lat/lon <-> pixel reference points
 const PX_TO_LATLON = {
@@ -158,6 +191,8 @@ let dpr = window.devicePixelRatio || 1;
 let marker = null;        // {px, py, accuracyM} — live "you are here" dot
 let searchPin = null;     // {px, py, name} — dropped pin from search
 let followMode = false;   // when true, view re-centers on the live marker each GPS update
+let measureMode = false;
+let measurePoints = [];   // up to 2: {px, py, label}
 
 const img = new Image();
 img.onload = () => { resize(); fitToScreen(); draw(); };
@@ -235,6 +270,19 @@ function draw() {
     drawPin(searchPin.px, searchPin.py, '#e2483d');
   }
 
+  if (measurePoints.length === 2) {
+    ctx.save();
+    ctx.setLineDash([10 / view.scale, 6 / view.scale]);
+    ctx.strokeStyle = '#ffd166';
+    ctx.lineWidth = 3 / view.scale;
+    ctx.beginPath();
+    ctx.moveTo(measurePoints[0].px, measurePoints[0].py);
+    ctx.lineTo(measurePoints[1].px, measurePoints[1].py);
+    ctx.stroke();
+    ctx.restore();
+  }
+  measurePoints.forEach((p, i) => drawPin(p.px, p.py, i === 0 ? '#2ecc71' : '#9b59b6'));
+
   ctx.restore();
 }
 
@@ -243,6 +291,7 @@ const activePointers = new Map(); // pointerId -> {x, y} in CSS pixels
 let dragMoved = false;
 let pinchPrevDist = null;
 let pinchPrevMidX = 0, pinchPrevMidY = 0;
+let tapCandidate = null; // {pointerId, x, y, time} — used to detect a clean tap for measure mode
 
 function screenToImage(clientX, clientY) {
   const sx = clientX * dpr, sy = clientY * dpr;
@@ -264,6 +313,12 @@ canvas.addEventListener('pointerdown', (e) => {
   activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
   dragMoved = false;
 
+  if (activePointers.size === 1) {
+    tapCandidate = { pointerId: e.pointerId, x: e.clientX, y: e.clientY, time: Date.now() };
+  } else {
+    tapCandidate = null;
+  }
+
   if (activePointers.size === 2) {
     const [p1, p2] = [...activePointers.values()];
     pinchPrevDist = pointerDist(p1, p2);
@@ -283,13 +338,14 @@ canvas.addEventListener('pointermove', (e) => {
     const dx = (e.clientX - (prev.x ?? e.clientX)) * dpr;
     const dy = (e.clientY - (prev.y ?? e.clientY)) * dpr;
     if (activePointers.__lastSingle) {
-      if (Math.abs(dx) > 2 || Math.abs(dy) > 2) { dragMoved = true; followMode = false; updateLocateButton(); }
+      if (Math.abs(dx) > 4 || Math.abs(dy) > 4) { dragMoved = true; tapCandidate = null; followMode = false; updateLocateButton(); }
       view.cx -= dx / view.scale;
       view.cy -= dy / view.scale;
       draw();
     }
     activePointers.__lastSingle = { x: e.clientX, y: e.clientY };
   } else if (activePointers.size === 2) {
+    tapCandidate = null;
     followMode = false; updateLocateButton();
     const [p1, p2] = [...activePointers.values()];
     const dist = pointerDist(p1, p2);
@@ -312,6 +368,12 @@ canvas.addEventListener('pointermove', (e) => {
 });
 
 function releasePointer(e) {
+  if (measureMode && tapCandidate && tapCandidate.pointerId === e.pointerId &&
+      !dragMoved && (Date.now() - tapCandidate.time) < 400 && activePointers.size === 1) {
+    const pt = screenToImage(e.clientX, e.clientY);
+    addMeasurePoint({ px: pt.x, py: pt.y, label: 'Dropped pin' });
+  }
+  tapCandidate = null;
   activePointers.delete(e.pointerId);
   activePointers.__lastSingle = null;
   if (activePointers.size < 2) pinchPrevDist = null;
@@ -334,6 +396,83 @@ canvas.addEventListener('wheel', (e) => {
 
 document.getElementById('zoomIn').addEventListener('click', () => { view.scale *= 1.25; draw(); });
 document.getElementById('zoomOut').addEventListener('click', () => { view.scale *= 0.8; draw(); });
+
+// ---- Measure distance ----
+function haversineMeters(lat1, lon1, lat2, lon2) {
+  const R = 6371000;
+  const toRad = d => d * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function formatDistance(m) {
+  if (m >= 1000) return (m / 1000).toFixed(2) + ' km';
+  return Math.round(m) + ' m';
+}
+
+const measureBtn = document.getElementById('measureBtn');
+const measurePanel = document.getElementById('measurePanel');
+const mpStatus = document.getElementById('mpStatus');
+const mpDist = document.getElementById('mpDist');
+
+function addMeasurePoint(point) {
+  if (measurePoints.length >= 2) measurePoints = [];
+  measurePoints.push(point);
+  updateMeasurePanel();
+  draw();
+}
+
+function updateMeasurePanel() {
+  if (measurePoints.length === 0) {
+    mpStatus.textContent = 'Tap two points on the map, or search and pick a building.';
+    mpDist.style.display = 'none';
+  } else if (measurePoints.length === 1) {
+    mpStatus.textContent = 'Point A: ' + measurePoints[0].label + '. Now tap a second point.';
+    mpDist.style.display = 'none';
+  } else {
+    const a = pxToLatLon(measurePoints[0].px, measurePoints[0].py);
+    const b = pxToLatLon(measurePoints[1].px, measurePoints[1].py);
+    const meters = haversineMeters(a.lat, a.lon, b.lat, b.lon);
+    const walkMins = Math.max(1, Math.round(meters / 1.35 / 60));
+    mpStatus.textContent = measurePoints[0].label + ' \u2192 ' + measurePoints[1].label;
+    mpDist.textContent = formatDistance(meters) + '  (\u2248' + walkMins + ' min walk)';
+    mpDist.style.display = 'block';
+  }
+}
+
+measureBtn.addEventListener('click', () => {
+  measureMode = !measureMode;
+  measureBtn.classList.toggle('active', measureMode);
+  if (measureMode) {
+    measurePoints = [];
+    updateMeasurePanel();
+    measurePanel.classList.add('show');
+    hideToast();
+  } else {
+    measurePanel.classList.remove('show');
+    measurePoints = [];
+    draw();
+  }
+});
+
+document.getElementById('mpClear').addEventListener('click', () => {
+  measurePoints = [];
+  updateMeasurePanel();
+  draw();
+});
+document.getElementById('mpClose').addEventListener('click', () => {
+  measureMode = false;
+  measureBtn.classList.remove('active');
+  measurePanel.classList.remove('show');
+  measurePoints = [];
+  draw();
+});
+document.getElementById('mpUseLoc').addEventListener('click', () => {
+  if (!marker) { showToast('Turn on location first (tap the compass button), then try again.', true); return; }
+  addMeasurePoint({ px: marker.px, py: marker.py, label: 'My location' });
+});
 
 // ---- Geolocation ----
 let watchId = null;
@@ -396,12 +535,11 @@ function startWatching() {
 // ---- Search ----
 const searchBox = document.getElementById('searchBox');
 const searchResults = document.getElementById('searchResults');
-const searchable = BUILDINGS.filter(b => b.px !== null);
 
 function runSearch(q) {
   q = q.trim().toLowerCase();
   if (!q) { searchResults.style.display = 'none'; searchResults.innerHTML = ''; return; }
-  const matches = searchable.filter(b =>
+  const matches = BUILDINGS.filter(b =>
     b.no.toLowerCase().includes(q) ||
     b.name.toLowerCase().includes(q) ||
     b.address.toLowerCase().includes(q)
@@ -416,6 +554,7 @@ function runSearch(q) {
     '<div class="resultItem" data-idx="' + i + '">' +
       '<span class="rno">' + b.no + '</span>' + b.name +
       '<span class="raddr">' + b.address + '</span>' +
+      (b.px === null ? '<span class="rnoloc">Exact map position not available</span>' : '') +
     '</div>'
   ).join('');
   searchResults.style.display = 'block';
@@ -426,14 +565,26 @@ function runSearch(q) {
 }
 
 function selectBuilding(b) {
+  searchResults.style.display = 'none';
+  searchBox.value = b.no + ' \u2014 ' + b.name;
+  searchBox.blur();
+
+  if (b.px === null) {
+    showToast(b.no + ' \u2014 ' + b.name + '<br>' + b.address +
+      '<br><span class="warn">Exact position on this map isn\u2019t available yet.</span>');
+    return;
+  }
+
+  if (measureMode) {
+    addMeasurePoint({ px: b.px, py: b.py, label: b.no + ' ' + b.name });
+    return;
+  }
+
   searchPin = { px: b.px, py: b.py, name: b.name };
   followMode = false;
   updateLocateButton();
   view.cx = b.px; view.cy = b.py;
   view.scale = Math.max(view.scale, 2.2);
-  searchResults.style.display = 'none';
-  searchBox.value = b.no + ' — ' + b.name;
-  searchBox.blur();
   draw();
 }
 
